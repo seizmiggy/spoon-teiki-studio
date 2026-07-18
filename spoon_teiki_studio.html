@@ -127,7 +127,24 @@ header h1 .dots{color:var(--ink2); letter-spacing:.05em; font-size:13px;}
   border-radius:6px; padding:2px 7px; cursor:pointer; user-select:none; min-width:26px; text-align:center;}
 .chip:hover{border-color:var(--accent);}
 .note{font-size:10px; color:var(--ink2); line-height:1.5;}
-#selInfo .btns{display:flex; gap:6px; margin-top:6px;}
+#selInfo .btns{display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;}
+#nudgeBtns button{min-width:34px; min-height:30px; font-size:13px;}
+
+/* ---------- 狭い画面(iPhone想定): サイドバーをボトムシート化 ---------- */
+#sheetHandle{display:none;}
+@media (max-width:640px){
+  #sidebar{position:fixed; left:0; right:0; bottom:0; z-index:40; width:auto; max-height:55vh;
+    border-left:none; border-top:1px solid var(--line); border-radius:14px 14px 0 0;
+    box-shadow:0 -8px 26px rgba(0,0,0,.5);
+    transform:translateY(calc(100% - 40px)); transition:transform .22s ease;}
+  #sidebar.open{transform:translateY(0);}
+  #sheetHandle{display:flex; align-items:center; justify-content:center; gap:8px;
+    position:sticky; top:-10px; margin:-10px -10px 2px; padding:12px 10px; z-index:2;
+    background:var(--panel); color:var(--accent); font-size:12px; letter-spacing:.08em;
+    cursor:pointer; user-select:none; -webkit-user-select:none; border-radius:14px 14px 0 0;
+    border-bottom:1px solid var(--line);}
+  #editBody{padding-bottom:40px;} /* 折りたたんだシートの取っ手ぶんの余白 */
+}
 
 /* ---------- preview tab ---------- */
 #previewPane{flex-direction:column;}
@@ -349,6 +366,7 @@ body.songMode #pvJoinWrap{display:inline;}
 
   <!-- ===== sidebar ===== -->
   <div id="sidebar">
+    <div id="sheetHandle"><span id="sheetArrow">▲</span> 道具箱をひらく</div>
     <div class="sBox">
       <h3>目標と制約</h3>
       <div class="frow"><label>目標文字数</label><input type="number" id="setTarget" min="10" max="200" value="200"></div>
@@ -370,6 +388,13 @@ body.songMode #pvJoinWrap{display:inline;}
         <button id="selCenter" hidden>中央寄せ</button>
         <button id="selCopyPage" hidden>他ページへコピー</button>
         <button id="selDel" hidden style="color:var(--danger);">削除</button>
+      </div>
+      <div class="btns" id="nudgeBtns" hidden>
+        <button id="nudgeL" title="左へ1マス">◀</button>
+        <button id="nudgeU" title="上へ1行">▲</button>
+        <button id="nudgeD" title="下へ1行">▼</button>
+        <button id="nudgeR" title="右へ1マス">▶</button>
+        <span class="note" style="align-self:center;">1マスずつ動かす</span>
       </div>
     </div>
 
@@ -549,6 +574,15 @@ body.songMode #pvJoinWrap{display:inline;}
     <h2 style="margin-bottom:6px;">記号一覧 <span class="note" style="font-weight:normal;">クリック=入力欄へ挿入(入力欄が閉じている時はコピー)</span></h2>
     <div id="symBody"></div>
     <div class="foot"><button id="symClose" class="primary">閉じる</button></div>
+  </div>
+</div>
+
+<div class="modalBg" id="copyFbModal">
+  <div class="modal" style="max-width:440px;">
+    <h2 style="margin-bottom:6px;">自動コピーできませんでした</h2>
+    <div class="note" style="margin-bottom:8px;">下の文字を長押し →「すべてを選択」→「コピー」してください。<br>(見えない文字も含まれています。そのまま全部コピーすればOK)</div>
+    <textarea id="copyFbTa" readonly style="width:100%; height:130px; font-family:'MS Gothic',monospace; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:8px; white-space:pre;"></textarea>
+    <div class="foot"><button id="copyFbClose" class="primary">閉じる</button></div>
   </div>
 </div>
 
@@ -990,21 +1024,28 @@ document.addEventListener("keydown",ev=>{
   // 矢印キー: 選択中の要素を1マスずつ移動
   const ARROWS={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
   if(ev.key in ARROWS){
-    const ids=state.selIds.size?[...state.selIds]:(state.selId!=null?[state.selId]:[]);
-    const els=ids.map(id=>state.elements.find(x=>x.id===id)).filter(Boolean);
-    if(!els.length) return;
-    ev.preventDefault();
-    if(Date.now()-lastNudge>900) pushUndo();
-    lastNudge=Date.now();
-    const [dx,dy]=ARROWS[ev.key];
-    const hstep = els.every(el=>el.type!=="art"&&state.halfRows.has(el.row)) ? 1 : 2;
-    for(const el of els){
-      el.col=clampLock(el, el.col+dx*hstep);
-      el.row=Math.max(0, el.row+dy);
-    }
-    renderAll();
+    if(nudgeSelection(...ARROWS[ev.key])) ev.preventDefault();
   }
 });
+// 選択中の要素を1マス動かす(矢印キーとタッチ用◀▲▼▶ボタンの共通処理)
+function nudgeSelection(dx,dy){
+  const ids=state.selIds.size?[...state.selIds]:(state.selId!=null?[state.selId]:[]);
+  const els=ids.map(id=>state.elements.find(x=>x.id===id)).filter(Boolean);
+  if(!els.length) return false;
+  if(Date.now()-lastNudge>900) pushUndo();
+  lastNudge=Date.now();
+  const hstep = els.every(el=>el.type!=="art"&&state.halfRows.has(el.row)) ? 1 : 2;
+  for(const el of els){
+    el.col=clampLock(el, el.col+dx*hstep);
+    el.row=Math.max(0, el.row+dy);
+  }
+  renderAll();
+  return true;
+}
+$("nudgeL").onclick=()=>nudgeSelection(-1,0);
+$("nudgeR").onclick=()=>nudgeSelection(1,0);
+$("nudgeU").onclick=()=>nudgeSelection(0,-1);
+$("nudgeD").onclick=()=>nudgeSelection(0,1);
 
 /* ---------------- popover ---------------- */
 const popover=$("popover");
@@ -1113,14 +1154,14 @@ function renderSide(){
     c.onclick=()=>{ if(popover.style.display==="block"){ const inp=$("popText");
         const st=inp.selectionStart??inp.value.length;
         inp.value=inp.value.slice(0,st)+s+inp.value.slice(inp.selectionEnd??st); inp.focus(); }
-      else{ navigator.clipboard.writeText(s).then(()=>toast("コピーしました: "+s)); } };
+      else{ copyText(s,"コピーしました: "+s); } };
     c.ondblclick=()=>{ state.palette=state.palette.filter(x=>x!==s); renderSide(); };
     pc.appendChild(c);
   });
   const rc=$("recentChips"); rc.innerHTML="";
   state.recent.forEach(s=>{
     const c=document.createElement("span"); c.className="chip"; c.textContent=s;
-    c.onclick=()=>{ navigator.clipboard.writeText(s).then(()=>toast("コピーしました")); };
+    c.onclick=()=>{ copyText(s,"コピーしました"); };
     rc.appendChild(c);
   });
   // selection info
@@ -1139,6 +1180,7 @@ function renderSide(){
   $("selUngroup").hidden=!selArr.some(x=>x.grp);
   $("selCenter").hidden=!selArr.length;
   $("selDel").hidden=!selArr.length;
+  $("nudgeBtns").hidden=!selArr.length;
   $("selCopyPage").hidden=!(e&&song.active);
   $("selDesc").textContent = !selArr.length ? "なし(Shift+クリックで複数選択)"
     : multi ? `${selArr.length}個を選択中${(grps.size===1&&!grps.has(0))?"(まとまり)":""} — ドラッグや矢印キーで一緒に動きます`
@@ -1335,7 +1377,7 @@ function symChip(box, ch, label){
       inp.value=inp.value.slice(0,st)+ch+inp.value.slice(inp.selectionEnd??st);
       inp.focus(); inp.selectionStart=inp.selectionEnd=st+ch.length;
     }else{
-      navigator.clipboard.writeText(ch).then(()=>toast("コピーしました: "+(label||ch)));
+      copyText(ch,"コピーしました: "+(label||ch));
     }
     renderSymRecent();
   };
@@ -1922,10 +1964,27 @@ $("loadFile").onchange=ev=>{
 };
 
 /* ---------------- copy / QR ---------------- */
+// クリップボードが使えない環境(非HTTPS・権限拒否など)では手動コピー用モーダルに退避する
+function showCopyFallback(s){
+  $("copyFbModal").classList.add("open");
+  const ta=$("copyFbTa"); ta.value=s;
+  try{ ta.focus(); ta.select(); }catch(_){ }
+}
+$("copyFbClose").onclick=()=>$("copyFbModal").classList.remove("open");
+function copyText(s,okMsg){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(s)
+      .then(()=>{ if(okMsg) toast(okMsg); return true; })
+      .catch(()=>{ showCopyFallback(s); return false; });
+  }
+  showCopyFallback(s);
+  return Promise.resolve(false);
+}
 $("btnCopy").onclick=()=>{
   const c=compose();
   if(!c.full){ toast("まだ何もありません"); return; }
-  navigator.clipboard.writeText(c.full).then(()=>{
+  copyText(c.full).then(ok=>{
+    if(!ok) return;
     const n = state.countMode==="cp"?c.cp:c.u16;
     const warn = n>state.target?" ⚠目標超過":"";
     if(song.active){
@@ -1935,15 +1994,13 @@ $("btnCopy").onclick=()=>{
     }else{
       toast(`コピーしました(${n}文字${warn})`);
     }
-  }).catch(()=>toast("コピーできませんでした"));
+  });
 };
 $("btnCopyAll").onclick=()=>{
   if(!song.active) return;
   const txt=buildAllText();
   if(!txt){ toast("まだ何もありません"); return; }
-  navigator.clipboard.writeText(txt)
-    .then(()=>toast(`全${allPages().length}ページを一括コピーしました(区切り行は貼らない用)`))
-    .catch(()=>toast("コピーできませんでした"));
+  copyText(txt, `全${allPages().length}ページを一括コピーしました(区切り行は貼らない用)`);
 };
 $("btnQR").onclick=()=>{
   const c=compose();
@@ -2466,6 +2523,13 @@ $("pvJoin").onchange=renderPreview;
 
 initPreview();
 renderAll();
+
+/* ---------------- 狭い画面: サイドバー(ボトムシート)の開閉 ---------------- */
+$("sheetHandle").addEventListener("click",()=>{
+  const open=$("sidebar").classList.toggle("open");
+  $("sheetArrow").textContent=open?"▼":"▲";
+  $("sheetHandle").lastChild.textContent=open?" 道具箱をとじる":" 道具箱をひらく";
+});
 
 /* ---------------- PWA: Service Worker登録(http/https配信時のみ。file://やテスト環境では何もしない) ---------------- */
 if(typeof navigator!=="undefined" && "serviceWorker" in navigator && /^https?:$/.test(location.protocol)){

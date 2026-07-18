@@ -582,11 +582,57 @@ setTimeout(()=>{
     eq("ドラッグ中は長押し発火なし(選択に追加されない)", S.selIds.has(102), false);
     n2.dispatchEvent(new w.MouseEvent("pointerup",{bubbles:true,clientX:40,clientY:0}));
 
+console.log("=== v3.5: ボトムシートと微調整ボタン ===");
+{
+  const css=[...w.document.querySelectorAll("style")].map(s=>s.textContent).join("");
+  eq("狭幅メディアクエリでサイドバーを固定シート化", /@media \(max-width:640px\)\{[\s\S]*?#sidebar\{position:fixed/.test(css), true);
+  const sh=w.document.getElementById("sheetHandle");
+  eq("シートの取っ手が存在", !!sh, true);
+  sh.click();
+  eq("取っ手クリックでシートが開く", w.document.getElementById("sidebar").classList.contains("open"), true);
+  eq("矢印が▼に変わる", w.document.getElementById("sheetArrow").textContent, "▼");
+  sh.click();
+  eq("再クリックで閉じる", w.document.getElementById("sidebar").classList.contains("open"), false);
+
+  // 微調整ボタン(矢印キーと同じ挙動)
+  S.elements=[{id:201,type:"text",row:2,col:4,text:"うた"}];
+  S.selId=201; S.selIds=new Set([201]); S.halfRows=new Set(); S.widthLock=0;
+  w.eval("renderAll")();
+  eq("選択中は微調整ボタンが出る", w.document.getElementById("nudgeBtns").hidden, false);
+  w.document.getElementById("nudgeR").click();
+  eq("▶で右へ2(全角1マス)", S.elements[0].col, 6);
+  w.document.getElementById("nudgeD").click();
+  eq("▼で行+1", S.elements[0].row, 3);
+  S.halfRows.add(3);
+  w.document.getElementById("nudgeL").click();
+  eq("半角許可行では1刻み", S.elements[0].col, 5);
+  S.halfRows=new Set();
+  S.selId=null; S.selIds=new Set();
+  w.eval("renderAll")();
+  eq("非選択では微調整ボタンは出ない", w.document.getElementById("nudgeBtns").hidden, true);
+}
+
+console.log("=== v3.5: コピー失敗時の手動コピー退避 ===");
+{
+  Object.defineProperty(w.navigator,"clipboard",{value:undefined,configurable:true});
+  w.eval("copyText")("テスト⠿ㅤ");
+  eq("clipboard無しで退避モーダルが開く", w.document.getElementById("copyFbModal").classList.contains("open"), true);
+  eq("見えない文字もそのまま入る", w.document.getElementById("copyFbTa").value, "テスト⠿ㅤ");
+  w.document.getElementById("copyFbClose").click();
+  eq("閉じるで閉じる", w.document.getElementById("copyFbModal").classList.contains("open"), false);
+  Object.defineProperty(w.navigator,"clipboard",{value:{writeText:()=>Promise.reject(new Error("denied"))},configurable:true});
+}
+w.eval("copyText")("だめなとき").then(ok=>{
+  eq("書き込み拒否時はfalseを返す", ok, false);
+  eq("拒否時も退避モーダルが開く", w.document.getElementById("copyFbModal").classList.contains("open"), true);
+  w.document.getElementById("copyFbClose").click();
+
 console.log("=== ランタイムエラー ===");
 eq("ページ読み込みエラーなし", errors, []);
 
 console.log(fail ? `\n${fail}件 失敗` : "\n全テスト合格 ✅");
 process.exit(fail ? 1 : 0);
+});
   }, 700);
 }, 700);
 }, 0);
