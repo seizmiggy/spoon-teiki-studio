@@ -527,9 +527,66 @@ console.log("=== v3.3: 実機ズレ対策と幅ロックの本実装 ===");
     eq("1行目アートの左詰めも点字空白のみ", /^\u2800+/.test(cc.lines[0].text) && !cc.lines[0].text.includes("\u3000"), true);
   }
 
+console.log("=== v3.4: タッチ操作(スプリント1) ===");
+{
+  // CSSガード: ドラッグ対象がスクロールに奪われない指定を落としていないか
+  const css=[...w.document.querySelectorAll("style")].map(s=>s.textContent).join("");
+  eq(".elemにtouch-action:none", /\.elem\{[^}]*touch-action:none/s.test(css), true);
+  eq(".elemに-webkit-touch-callout:none", /\.elem\{[^}]*-webkit-touch-callout:none/s.test(css), true);
+  eq(".gripにtouch-action:none", /\.grip\{[^}]*touch-action:none/s.test(css), true);
+
+  // toggleMultiSelect 単体(Shift+クリックと長押しの共通ロジック)
+  S.elements=[
+    {id:101,type:"text",row:0,col:0,text:"あ"},
+    {id:102,type:"text",row:0,col:4,text:"い"},
+    {id:103,type:"text",row:1,col:0,text:"う",grp:5},
+    {id:104,type:"text",row:1,col:4,text:"え",grp:5},
+  ];
+  S.selId=101; S.selIds=new Set([101]);
+  w.eval("renderAll")();
+  const toggle=w.eval("toggleMultiSelect");
+  toggle(S.elements[1]); // 102を追加
+  eq("トグルで追加", [...S.selIds].sort(), [101,102]);
+  toggle(S.elements[2]); // グループ(103,104)ごと追加
+  eq("グループの一員でグループ全員入る", [...S.selIds].sort(), [101,102,103,104]);
+  toggle(S.elements[3]); // グループごと解除
+  eq("グループごと解除", [...S.selIds].sort(), [101,102]);
+}
+// 長押し0.5秒で複数選択に追加(DOMイベント経由・実タイマー)
+{
+  S.selId=101; S.selIds=new Set([101]);
+  w.eval("renderAll")();
+  const node=w.document.querySelector('.elem[data-id="102"]');
+  eq("対象ノードが描画されている", !!node, true);
+  node.dispatchEvent(new w.MouseEvent("pointerdown",{bubbles:true,clientX:10,clientY:10}));
+}
+setTimeout(()=>{
+  eq("長押しで選択に追加", [...S.selIds].sort(), [101,102]);
+  const node=w.document.querySelector('.elem[data-id="102"]');
+  node.dispatchEvent(new w.MouseEvent("pointerup",{bubbles:true,clientX:10,clientY:10}));
+  eq("長押し後のpointerupは単選択に戻さない", [...S.selIds].sort(), [101,102]);
+
+  // タップ(長押しに満たない押下)は従来どおり単選択
+  const n1=w.document.querySelector('.elem[data-id="101"]');
+  n1.dispatchEvent(new w.MouseEvent("pointerdown",{bubbles:true,clientX:5,clientY:5}));
+  n1.dispatchEvent(new w.MouseEvent("pointerup",{bubbles:true,clientX:5,clientY:5}));
+  eq("タップは単選択", [...S.selIds], [101]);
+
+  // ドラッグを始めたら長押しは発火しない
+  S.selId=null; S.selIds=new Set();
+  w.eval("renderAll")();
+  const n2=w.document.querySelector('.elem[data-id="102"]');
+  n2.dispatchEvent(new w.MouseEvent("pointerdown",{bubbles:true,clientX:0,clientY:0}));
+  n2.dispatchEvent(new w.MouseEvent("pointermove",{bubbles:true,clientX:40,clientY:0}));
+  setTimeout(()=>{
+    eq("ドラッグ中は長押し発火なし(選択に追加されない)", S.selIds.has(102), false);
+    n2.dispatchEvent(new w.MouseEvent("pointerup",{bubbles:true,clientX:40,clientY:0}));
+
 console.log("=== ランタイムエラー ===");
 eq("ページ読み込みエラーなし", errors, []);
 
 console.log(fail ? `\n${fail}件 失敗` : "\n全テスト合格 ✅");
 process.exit(fail ? 1 : 0);
+  }, 700);
+}, 700);
 }, 0);

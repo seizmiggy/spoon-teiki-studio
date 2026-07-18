@@ -1,5 +1,12 @@
 {
-  "dependencies": {
+  "name": "spoon-teiki-studio",
+  "version": "3.3.0",
+  "private": true,
+  "description": "Spoon定期スタジオ — iPhoneアプリ化(PWA)プロジェクト",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "devDependencies": {
     "jsdom": "^29.1.1"
   }
 }

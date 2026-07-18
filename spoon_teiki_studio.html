@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spoon定期スタジオ</title>
+<meta name="theme-color" content="#13141c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="定期スタジオ">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -91,7 +97,8 @@ header h1 .dots{color:var(--ink2); letter-spacing:.05em; font-size:13px;}
 .symGrid .chip{font-size:16px; min-width:30px; text-align:center; font-family:"MS Gothic","Noto Sans Mono CJK JP",monospace;}
 .symGrid .chip.lbl{font-size:10px; color:var(--ink2);}
 .pvWarn{background:#3a2418; color:#f0b070; border:1px solid #7a4a20; border-radius:6px; font-size:11px; padding:5px 8px; margin:6px;}
-.elem{position:absolute; white-space:pre; cursor:grab; border-radius:3px;}
+.elem{position:absolute; white-space:pre; cursor:grab; border-radius:3px;
+  touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;}
 .elem.text{font-family:"MS Gothic","BIZ UDGothic","Osaka-Mono",monospace; color:var(--ink);}
 .elem:hover{outline:1px solid rgba(174,184,240,.5);}
 .elem.selected{outline:1.5px solid var(--sel); background:rgba(174,184,240,.10);}
@@ -154,7 +161,7 @@ body.songMode #film{display:flex;}
 #trayBar.show{display:flex;}
 #trayBar .chip{border-color:var(--danger);}
 #trayBar .chip.pending{outline:2px solid var(--danger);}
-.grip{position:absolute; width:11px; height:11px; border-radius:50%; background:var(--accent2);
+.grip{position:absolute; width:11px; height:11px; border-radius:50%; background:var(--accent2); touch-action:none;
   border:2px solid var(--bg); cursor:grab; z-index:20;}
 .grip:hover{background:var(--accent);}
 .grip.selLine{box-shadow:0 0 0 2px var(--accent);}
@@ -893,10 +900,30 @@ function clampLineToLock(gs){
 function groupIdsOf(e){
   return e.grp ? state.elements.filter(x=>x.grp===e.grp).map(x=>x.id) : [e.id];
 }
+// 複数選択への追加/解除(Shift+クリックと長押しの共通処理)
+function toggleMultiSelect(e){
+  const gids=groupIdsOf(e);
+  const ns=new Set(state.selIds.size?state.selIds:(state.selId!=null?[state.selId]:[]));
+  const allIn=gids.every(id=>ns.has(id));
+  gids.forEach(id=> allIn?ns.delete(id):ns.add(id));
+  state.selIds=ns; state.selId=ns.size?[...ns].pop():null;
+  renderAll();
+  return !allIn; // true=追加した / false=外した
+}
+const LONGPRESS_MS=500;
 function attachElemEvents(node,e){
+  let longT=null;
   node.addEventListener("pointerdown",ev=>{
     ev.preventDefault(); ev.stopPropagation();
-    node.setPointerCapture(ev.pointerId);
+    if(node.setPointerCapture) try{node.setPointerCapture(ev.pointerId);}catch(_){ }
+    // 長押し(指を動かさず0.5秒)= 複数選択に追加/解除
+    clearTimeout(longT);
+    longT=setTimeout(()=>{
+      if(!drag||drag.node!==node||drag.moved) return;
+      drag=null; // 以降のmove/upはこの押下では無効
+      const added=toggleMultiSelect(e);
+      toast(added?`選択に追加(${state.selIds.size}個選択中)`:"選択から外しました");
+    },LONGPRESS_MS);
     // すでに複数選択に含まれている、またはグループの一員なら一緒に動かす
     let ids=null;
     if(state.selIds.has(e.id) && state.selIds.size>1) ids=[...state.selIds];
@@ -911,7 +938,7 @@ function attachElemEvents(node,e){
     if(!drag||drag.node!==node) return;
     const dx=ev.clientX-drag.sx, dy=ev.clientY-drag.sy;
     if(!drag.moved && Math.hypot(dx,dy)<4) return;
-    if(!drag.moved){ drag.moved=true; pushUndo(); node.classList.add("dragging"); }
+    if(!drag.moved){ drag.moved=true; clearTimeout(longT); pushUndo(); node.classList.add("dragging"); }
     const nr=Math.max(0,drag.or+Math.round(dy/LH));
     e.row=nr; e.col=clampLock(e, snapCol(drag.oc+dx/HP, nr, e.type==="art"));
     node.style.left=(e.col*HP)+"px"; node.style.top=(e.row*LH)+"px";
@@ -929,16 +956,13 @@ function attachElemEvents(node,e){
     }
   });
   node.addEventListener("pointerup",ev=>{
+    clearTimeout(longT);
     if(!drag||drag.node!==node) return;
     const moved=drag.moved; node.classList.remove("dragging"); drag=null;
     if(moved){ renderAll(); return; }
     const gids=groupIdsOf(e);
     if(ev.shiftKey){
-      const ns=new Set(state.selIds.size?state.selIds:(state.selId!=null?[state.selId]:[]));
-      const allIn=gids.every(id=>ns.has(id));
-      gids.forEach(id=> allIn?ns.delete(id):ns.add(id));
-      state.selIds=ns; state.selId=ns.size?[...ns].pop():null;
-      renderAll();
+      toggleMultiSelect(e);
     }else{
       state.selIds=new Set(gids); state.selId=e.id;
       renderAll();
@@ -2131,7 +2155,7 @@ function switchPage(i){
 function attachGlyphEvents(node,g,p){
   node.addEventListener("pointerdown",ev=>{
     ev.preventDefault(); ev.stopPropagation();
-    node.setPointerCapture(ev.pointerId);
+    if(node.setPointerCapture) try{node.setPointerCapture(ev.pointerId);}catch(_){ }
     gdrag={kind:"glyph",g,node,sx:ev.clientX,sy:ev.clientY,or:g.row,oc:g.col,moved:false};
   });
   node.addEventListener("pointermove",ev=>{
@@ -2154,7 +2178,7 @@ function attachGlyphEvents(node,g,p){
 function attachGripEvents(node,lid,p){
   node.addEventListener("pointerdown",ev=>{
     ev.preventDefault(); ev.stopPropagation();
-    node.setPointerCapture(ev.pointerId);
+    if(node.setPointerCapture) try{node.setPointerCapture(ev.pointerId);}catch(_){ }
     const glyphs=lineGlyphs(p,lid).map(g=>({g,r:g.row,c:g.col}));
     if(!glyphs.length) return;
     gdrag={kind:"grip",node,lid,glyphs,sx:ev.clientX,sy:ev.clientY,moved:false};
@@ -2442,6 +2466,13 @@ $("pvJoin").onchange=renderPreview;
 
 initPreview();
 renderAll();
+
+/* ---------------- PWA: Service Worker登録(http/https配信時のみ。file://やテスト環境では何もしない) ---------------- */
+if(typeof navigator!=="undefined" && "serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{/* オフライン化は任意機能。失敗してもアプリは動く */});
+  });
+}
 </script>
 </body>
 </html>
