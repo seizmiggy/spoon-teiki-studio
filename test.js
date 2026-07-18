@@ -612,6 +612,24 @@ console.log("=== v3.5: ボトムシートと微調整ボタン ===");
   eq("非選択では微調整ボタンは出ない", w.document.getElementById("nudgeBtns").hidden, true);
 }
 
+console.log("=== v3.6: 道具箱ドロワー(全幅で既定閉・ボタン開閉) ===");
+{
+  const css=[...w.document.querySelectorAll("style")].map(s=>s.textContent).join("");
+  eq("641px以上でもドロワー化(既定閉)のCSSがある", /@media \(min-width:641px\)\{[\s\S]*?#sidebar\{position:absolute[\s\S]*?translateX\(100%\)/.test(css), true);
+  const sb=w.document.getElementById("sidebar");
+  sb.classList.remove("open"); // 直前のテスト状態をリセット
+  const bt=w.document.getElementById("btnTools");
+  eq("ヘッダーに道具箱ボタンがある", !!bt, true);
+  bt.click();
+  eq("ボタンで開く", sb.classList.contains("open"), true);
+  eq("開いている間はボタンが強調表示", bt.classList.contains("primary"), true);
+  bt.click();
+  eq("もう一度押すと閉じる", sb.classList.contains("open"), false);
+  eq("閉じると強調も外れる", bt.classList.contains("primary"), false);
+  // HTML初期状態はopenクラスなし(=既定で閉)
+  eq("初期HTMLはopenを持たない", /id="sidebar"[^>]*class="[^"]*open/.test(html), false);
+}
+
 console.log("=== v3.5: コピー失敗時の手動コピー退避 ===");
 {
   Object.defineProperty(w.navigator,"clipboard",{value:undefined,configurable:true});
