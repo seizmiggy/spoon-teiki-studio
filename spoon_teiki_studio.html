@@ -971,14 +971,16 @@ function attachElemEvents(node,e){
   node.addEventListener("pointerdown",ev=>{
     ev.preventDefault(); ev.stopPropagation();
     if(node.setPointerCapture) try{node.setPointerCapture(ev.pointerId);}catch(_){ }
-    // 長押し(指を動かさず0.5秒)= 複数選択に追加/解除
+    // 長押し(指を動かさず0.5秒)= 複数選択に追加/解除。タッチ/ペンのみ対象(マウスのクリック保持で誤発火させない)
     clearTimeout(longT);
-    longT=setTimeout(()=>{
-      if(!drag||drag.node!==node||drag.moved) return;
-      drag=null; // 以降のmove/upはこの押下では無効
-      const added=toggleMultiSelect(e);
-      toast(added?`選択に追加(${state.selIds.size}個選択中)`:"選択から外しました");
-    },LONGPRESS_MS);
+    if(ev.pointerType!=="mouse"){
+      longT=setTimeout(()=>{
+        if(!drag||drag.node!==node||drag.moved) return;
+        drag=null; // 以降のmove/upはこの押下では無効
+        const added=toggleMultiSelect(e);
+        toast(added?`選択に追加(${state.selIds.size}個選択中)`:"選択から外しました");
+      },LONGPRESS_MS);
+    }
     // すでに複数選択に含まれている、またはグループの一員なら一緒に動かす
     let ids=null;
     if(state.selIds.has(e.id) && state.selIds.size>1) ids=[...state.selIds];
