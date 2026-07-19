@@ -1,6 +1,8 @@
 /* Spoon定期スタジオ Service Worker — オフライン動作用の最小構成 */
-const CACHE = "teiki-studio-v3.4.0";
+const CACHE = "teiki-studio-v3.4.1";
 const ASSETS = [
+  "./",
+  "./index.html",
   "./spoon_teiki_studio.html",
   "./manifest.json",
   "./icons/icon-192.png",
