@@ -1,5 +1,5 @@
 /* Spoon定期スタジオ Service Worker — オフライン動作用の最小構成 */
-const CACHE = "teiki-studio-v3.4.1";
+const CACHE = "teiki-studio-v3.4.2";
 const ASSETS = [
   "./",
   "./index.html",
