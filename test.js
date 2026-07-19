@@ -582,6 +582,33 @@ setTimeout(()=>{
     eq("ドラッグ中は長押し発火なし(選択に追加されない)", S.selIds.has(102), false);
     n2.dispatchEvent(new w.MouseEvent("pointerup",{bubbles:true,clientX:40,clientY:0}));
 
+console.log("=== v3.6: マウスでの長押し誤発火防止(PC操作性の検証) ===");
+{
+  // pointerType="mouse"はタッチと違い、0.5秒以上ボタンを押しっぱなしにしても長押し扱いにしない
+  // (でないとPCでの「クリックして編集」がボタン保持の長さ次第で不安定になる)
+  S.elements=[{id:301,type:"text",row:0,col:0,text:"ま"}];
+  S.selId=null; S.selIds=new Set();
+  w.eval("renderAll")();
+  const nm=w.document.querySelector('.elem[data-id="301"]');
+  nm.dispatchEvent(new w.PointerEvent("pointerdown",{bubbles:true,clientX:5,clientY:5,pointerType:"mouse"}));
+}
+setTimeout(()=>{
+  // マウスは長押しタイマーが起動していないので、離すまで選択状態は変化しない(=誤った複数選択追加が起きない)
+  eq("マウスを600ms押し続けても長押しの複数選択追加は起きない", [...S.selIds], []);
+  const nm=w.document.querySelector('.elem[data-id="301"]');
+  nm.dispatchEvent(new w.PointerEvent("pointerup",{bubbles:true,clientX:5,clientY:5,pointerType:"mouse"}));
+  eq("離した瞬間に通常クリックとして単選択される", [...S.selIds], [301]);
+
+  // pointerType="touch"では従来どおり長押しが機能する(マウス除外の回帰確認)
+  S.elements.push({id:302,type:"text",row:2,col:0,text:"て"});
+  w.eval("renderAll")();
+  const nt=w.document.querySelector('.elem[data-id="302"]');
+  nt.dispatchEvent(new w.PointerEvent("pointerdown",{bubbles:true,clientX:5,clientY:60,pointerType:"touch"}));
+  setTimeout(()=>{
+    eq("pointerType=touchでは長押しが機能する(回帰なし)", [...S.selIds].sort(), [301,302]);
+    const nt2=w.document.querySelector('.elem[data-id="302"]');
+    nt2.dispatchEvent(new w.PointerEvent("pointerup",{bubbles:true,clientX:5,clientY:60,pointerType:"touch"}));
+
 console.log("=== v3.5: ボトムシートと微調整ボタン ===");
 {
   const css=[...w.document.querySelectorAll("style")].map(s=>s.textContent).join("");
@@ -686,4 +713,6 @@ process.exit(fail ? 1 : 0);
 });
   }, 700);
 }, 700);
+  }, 600);
+}, 600);
 }, 0);
